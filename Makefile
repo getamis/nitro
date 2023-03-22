@@ -5,6 +5,11 @@
 # have to update an existing file. So - for docker, convert all dependencies
 # to order-only dependencies (timestamps ignored).
 # WARNING: when using this trick, you cannot use the $< automatic variable
+DOCKER_REPOSITORY := quay.io/amis
+DOCKER_IMAGE := $(DOCKER_REPOSITORY)/indexer-nitro
+ifeq ($(DOCKER_IMAGE_TAG),)
+DOCKER_IMAGE_TAG := $(shell git rev-parse --short HEAD 2> /dev/null)
+endif
 
 ifeq ($(origin NITRO_BUILD_IGNORE_TIMESTAMPS),undefined)
  DEP_PREDICATE:=
@@ -280,9 +285,12 @@ clean:
 
 .PHONY: docker
 docker:
-	docker build -t nitro-node-slim --target nitro-node-slim .
-	docker build -t nitro-node --target nitro-node .
-	docker build -t nitro-node-dev --target nitro-node-dev .
+	@docker build -t $(DOCKER_IMAGE):$(DOCKER_IMAGE_TAG) --target nitro-node .
+	@docker tag $(DOCKER_IMAGE):$(DOCKER_IMAGE_TAG) $(DOCKER_IMAGE):latest
+
+docker.push:
+	@docker push $(DOCKER_IMAGE):$(DOCKER_IMAGE_TAG)
+	@docker push $(DOCKER_IMAGE):latest
 
 # regular build rules
 
