@@ -1,0 +1,21 @@
+language: go
+go_import_path: github.com/OffchainLabs/nitro
+sudo: false
+jobs:
+  allow_failures:
+    - stage: build
+      os: osx
+      go: 1.17.x
+      env:
+        - azure-osx
+        - azure-ios
+        - cocoapods-ios
+
+  include:
+    - stage: Docker Image Release
+      script:
+        - echo "$QUAY_BOT_PASSWORD" | docker login -u "$QUAY_BOT_USERNAME" --password-stdin quay.io/amis
+        - make docker
+        - make docker.push
+      if: tag =~ ^v([0-9]+.)+[0-9]+
+      env: DOCKER_IMAGE_TAG="$TRAVIS_TAG"
