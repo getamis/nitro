@@ -16,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
+	pgen "github.com/offchainlabs/nitro/solgen/go/precompilesgen"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -35,8 +38,6 @@ import (
 	"github.com/offchainlabs/nitro/arbos/util"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/execution/gethexec"
-	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
-	pgen "github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/colors"
 	"github.com/offchainlabs/nitro/util/testhelpers"
@@ -1928,7 +1929,7 @@ func TestWasmStoreRebuilding(t *testing.T) {
 	// Start rebuilding and wait for it to finish
 	log.Info("starting rebuilding of wasm store")
 	execConfig := nodeB.ExecNode.ConfigFetcher()
-	Require(t, gethexec.RebuildWasmStore(ctx, wasmDbAfterDelete, nodeB.ExecNode.ChainDB, execConfig.RPC.MaxRecreateStateDepth, &execConfig.StylusTarget, bc, common.Hash{}, bc.CurrentBlock().Hash()))
+	Require(t, gethexec.RebuildWasmStore(ctx, wasmDbAfterDelete, nodeB.ExecNode.ChainDB, execConfig.RPC.MaxRecreateStateDepth, &execConfig.StylusTarget, bc, common.Hash{}, bc.CurrentBlock().Hash(), nodeB.Stack))
 
 	wasmDbAfterRebuild := nodeB.ExecNode.Backend.ArbInterface().BlockChain().StateCache().WasmStore()
 
