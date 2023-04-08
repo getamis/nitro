@@ -1000,7 +1000,7 @@ func CreateNode(
 	})
 	apis = append(apis, rpc.API{
 		Namespace: "debug",
-		Service:   eth.NewDebugAPI(eth.NewArbEthereum(l2BlockChain, chainDb)),
+		Service:   eth.NewDebugAPI(eth.NewArbEthereum(l2BlockChain, chainDb, stack)),
 		Public:    false,
 	})
 	stack.RegisterAPIs(apis)
