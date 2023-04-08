@@ -561,7 +561,7 @@ func validateOrUpgradeWasmStoreSchemaVersion(db ethdb.Database) error {
 	return nil
 }
 
-func rebuildLocalWasm(ctx context.Context, config *gethexec.Config, l2BlockChain *core.BlockChain, chainDb, wasmDb ethdb.Database, rebuildMode string) (ethdb.Database, *core.BlockChain, error) {
+func rebuildLocalWasm(ctx context.Context, config *gethexec.Config, l2BlockChain *core.BlockChain, chainDb, wasmDb ethdb.Database, rebuildMode string, stack *node.Node) (ethdb.Database, *core.BlockChain, error) {
 	var err error
 	latestBlock := l2BlockChain.CurrentBlock()
 	if latestBlock == nil || latestBlock.Number.Uint64() <= l2BlockChain.Config().ArbitrumChainParams.GenesisBlockNum ||
@@ -598,7 +598,7 @@ func rebuildLocalWasm(ctx context.Context, config *gethexec.Config, l2BlockChain
 				startBlockHash = latestBlock.Hash()
 			}
 			log.Info("Starting or continuing rebuilding of wasm store", "codeHash", position, "startBlockHash", startBlockHash)
-			if err := gethexec.RebuildWasmStore(ctx, wasmDb, chainDb, config.RPC.MaxRecreateStateDepth, &config.StylusTarget, l2BlockChain, position, startBlockHash); err != nil {
+			if err := gethexec.RebuildWasmStore(ctx, wasmDb, chainDb, config.RPC.MaxRecreateStateDepth, &config.StylusTarget, l2BlockChain, position, startBlockHash, stack); err != nil {
 				return nil, nil, fmt.Errorf("error rebuilding of wasm store: %w", err)
 			}
 		}
@@ -657,7 +657,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 						return chainDb, l2BlockChain, fmt.Errorf("failed to recreate missing states: %w", err)
 					}
 				}
-				return rebuildLocalWasm(ctx, &config.Execution, l2BlockChain, chainDb, wasmDb, config.Init.RebuildLocalWasm)
+				return rebuildLocalWasm(ctx, &config.Execution, l2BlockChain, chainDb, wasmDb, config.Init.RebuildLocalWasm, stack)
 			}
 			readOnlyDb.Close()
 		} else if !dbutil.IsNotExistError(err) {
@@ -934,7 +934,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 		return chainDb, l2BlockChain, err
 	}
 
-	return rebuildLocalWasm(ctx, &config.Execution, l2BlockChain, chainDb, wasmDb, config.Init.RebuildLocalWasm)
+	return rebuildLocalWasm(ctx, &config.Execution, l2BlockChain, chainDb, wasmDb, config.Init.RebuildLocalWasm, stack)
 }
 
 func validateGenesisAssertion(ctx context.Context, rollupAddress common.Address, l1Client *ethclient.Client, genesisBlockHash common.Hash, initDataReaderHasAccounts bool) error {
