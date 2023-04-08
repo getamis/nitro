@@ -24,7 +24,8 @@ import (
 	"time"
 
 	"github.com/cavaliergopher/grab/v3"
-	extract "github.com/codeclysm/extract/v3"
+	"github.com/codeclysm/extract/v3"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -550,7 +551,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 							startBlockHash = latestBlock.Hash()
 						}
 						log.Info("Starting or continuing rebuilding of wasm store", "codeHash", position, "startBlockHash", startBlockHash)
-						if err := gethexec.RebuildWasmStore(ctx, wasmDb, chainDb, config.Execution.RPC.MaxRecreateStateDepth, &config.Execution.StylusTarget, l2BlockChain, position, startBlockHash); err != nil {
+						if err := gethexec.RebuildWasmStore(ctx, wasmDb, chainDb, config.Execution.RPC.MaxRecreateStateDepth, &config.Execution.StylusTarget, l2BlockChain, position, startBlockHash, stack); err != nil {
 							return nil, nil, fmt.Errorf("error rebuilding of wasm store: %w", err)
 						}
 					}
