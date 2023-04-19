@@ -174,26 +174,32 @@ func validateBlockChain(blockChain *core.BlockChain, expectedChainId *big.Int) e
 }
 
 func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeConfig, chainId *big.Int, cacheConfig *core.CacheConfig) (ethdb.Database, *core.BlockChain, error) {
+	log.Info(fmt.Sprintf("init config = %v", config.Init))
 	if !config.Init.Force {
-		if readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true); err == nil {
-			if chainConfig := arbnode.TryReadStoredChainConfig(readOnlyDb); chainConfig != nil {
-				readOnlyDb.Close()
-				chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false)
-				if err != nil {
-					return chainDb, nil, err
-				}
-				l2BlockChain, err := arbnode.GetBlockChain(chainDb, cacheConfig, chainConfig, &config.Node)
-				if err != nil {
-					return chainDb, nil, err
-				}
-				err = validateBlockChain(l2BlockChain, chainConfig.ChainID)
-				if err != nil {
-					return chainDb, l2BlockChain, err
-				}
-				return chainDb, l2BlockChain, nil
-			}
-			readOnlyDb.Close()
+		readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true)
+		if err != nil {
+			log.Info("failed to open readonly database", "err", err)
+			return readOnlyDb, nil, err
 		}
+		chainConfig := arbnode.TryReadStoredChainConfig(readOnlyDb)
+		log.Info("L181: chain config", "config", chainConfig)
+		if chainConfig != nil {
+			readOnlyDb.Close()
+			chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false)
+			if err != nil {
+				return chainDb, nil, err
+			}
+			l2BlockChain, err := arbnode.GetBlockChain(chainDb, cacheConfig, chainConfig, &config.Node)
+			if err != nil {
+				return chainDb, nil, err
+			}
+			err = validateBlockChain(l2BlockChain, chainConfig.ChainID)
+			if err != nil {
+				return chainDb, l2BlockChain, err
+			}
+			return chainDb, l2BlockChain, nil
+		}
+		readOnlyDb.Close()
 	}
 
 	initFile, err := downloadInit(ctx, &config.Init)
@@ -262,6 +268,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 	txIndexWg := sync.WaitGroup{}
 	if initDataReader == nil {
 		chainConfig = arbnode.TryReadStoredChainConfig(chainDb)
+		log.Info("L268: chain config", "config", chainConfig)
 		if chainConfig == nil {
 			return chainDb, nil, errors.New("no --init.* mode supplied and chain data not in expected directory")
 		}
