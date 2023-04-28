@@ -162,39 +162,57 @@ func validateBlockChain(blockChain *core.BlockChain, chainConfig *params.ChainCo
 
 func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeConfig, chainId *big.Int, cacheConfig *core.CacheConfig, l1Client arbutil.L1Interface, rollupAddrs chaininfo.RollupAddresses) (ethdb.Database, *core.BlockChain, error) {
 	if !config.Init.Force {
-		if readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true); err == nil {
-			if chainConfig := gethexec.TryReadStoredChainConfig(readOnlyDb); chainConfig != nil {
-				readOnlyDb.Close()
-				if !arbmath.BigEquals(chainConfig.ChainID, chainId) {
-					return nil, nil, fmt.Errorf("database has chain ID %v but config has chain ID %v (are you sure this database is for the right chain?)", chainConfig.ChainID, chainId)
-				}
-				chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, config.Persistent.Ancient, "", false)
-				if err != nil {
-					return chainDb, nil, err
-				}
-				err = pruning.PruneChainDb(ctx, chainDb, stack, &config.Init, cacheConfig, l1Client, rollupAddrs, config.Node.ValidatorRequired())
-				if err != nil {
-					return chainDb, nil, fmt.Errorf("error pruning: %w", err)
-				}
-				l2BlockChain, err := gethexec.GetBlockChain(chainDb, cacheConfig, chainConfig, config.Execution.TxLookupLimit)
-				if err != nil {
-					return chainDb, nil, err
-				}
-				err = validateBlockChain(l2BlockChain, chainConfig)
-				if err != nil {
-					return chainDb, l2BlockChain, err
-				}
-				if config.Init.RecreateMissingStateFrom > 0 {
-					err = staterecovery.RecreateMissingStates(chainDb, l2BlockChain, cacheConfig, config.Init.RecreateMissingStateFrom)
-					if err != nil {
-						return chainDb, l2BlockChain, fmt.Errorf("failed to recreate missing states: %w", err)
-					}
-				}
-
-				return chainDb, l2BlockChain, nil
-			}
-			readOnlyDb.Close()
+		readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true, true)
+		if err != nil {
+			return readOnlyDb, nil, err
 		}
+		chainConfig := gethexec.TryReadStoredChainConfig(readOnlyDb)
+		if chainConfig != nil {
+			readOnlyDb.Close()
+			// init freezer with transfers table
+			if config.Init.ThenQuit {
+				// open freezer tables without transfers
+				chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, true)
+				if err != nil {
+					return chainDb, nil, err
+				}
+				// init statedb and write transfers back to freezer
+				err = rawdb.InitTransferFreezer(stack.ResolveAncient("l2chaindata", ""), chainDb)
+				if err != nil {
+					return chainDb, nil, err
+				}
+				chainDb.Close()
+			}
+
+			if !arbmath.BigEquals(chainConfig.ChainID, chainId) {
+				return nil, nil, fmt.Errorf("database has chain ID %v but config has chain ID %v (are you sure this database is for the right chain?)", chainConfig.ChainID, chainId)
+			}
+
+			chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, config.Persistent.Ancient, "", false, false)
+			if err != nil {
+				return chainDb, nil, err
+			}
+			err = pruning.PruneChainDb(ctx, chainDb, stack, &config.Init, cacheConfig, l1Client, rollupAddrs, config.Node.ValidatorRequired())
+			if err != nil {
+				return chainDb, nil, fmt.Errorf("error pruning: %w", err)
+			}
+			l2BlockChain, err := gethexec.GetBlockChain(chainDb, cacheConfig, chainConfig, config.Execution.TxLookupLimit)
+			if err != nil {
+				return chainDb, nil, err
+			}
+			err = validateBlockChain(l2BlockChain, chainConfig)
+			if err != nil {
+				return chainDb, l2BlockChain, err
+			}
+			if config.Init.RecreateMissingStateFrom > 0 {
+				err = staterecovery.RecreateMissingStates(chainDb, l2BlockChain, cacheConfig, config.Init.RecreateMissingStateFrom)
+				if err != nil {
+					return chainDb, l2BlockChain, fmt.Errorf("failed to recreate missing states: %w", err)
+				}
+			}
+			return chainDb, l2BlockChain, nil
+		}
+		readOnlyDb.Close()
 	}
 
 	initFile, err := downloadInit(ctx, &config.Init)
@@ -220,7 +238,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 
 	var initDataReader statetransfer.InitDataReader = nil
 
-	chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, config.Persistent.Ancient, "", false)
+	chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, config.Persistent.Ancient, "", false, false)
 	if err != nil {
 		return chainDb, nil, err
 	}
