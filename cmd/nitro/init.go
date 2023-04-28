@@ -176,7 +176,7 @@ func validateBlockChain(blockChain *core.BlockChain, expectedChainId *big.Int) e
 func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeConfig, chainId *big.Int, cacheConfig *core.CacheConfig) (ethdb.Database, *core.BlockChain, error) {
 	log.Info(fmt.Sprintf("init config = %v", config.Init))
 	if !config.Init.Force {
-		readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true)
+		readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true, true)
 		if err != nil {
 			log.Info("failed to open readonly database", "err", err)
 			return readOnlyDb, nil, err
@@ -185,7 +185,23 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 		log.Info("L181: chain config", "config", chainConfig)
 		if chainConfig != nil {
 			readOnlyDb.Close()
-			chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false)
+			// init freezer with transfers table
+			if config.Init.ThenQuit {
+				// open freezer tables without transfers
+				chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, true)
+				if err != nil {
+					return chainDb, nil, err
+				}
+
+				// init statedb and write transfers back to freezer
+				err = rawdb.InitTransferFreezer(stack.ResolveAncient("l2chaindata", ""), chainDb)
+				if err != nil {
+					return chainDb, nil, err
+				}
+				chainDb.Close()
+			}
+
+			chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, false)
 			if err != nil {
 				return chainDb, nil, err
 			}
@@ -225,7 +241,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 
 	var initDataReader statetransfer.InitDataReader = nil
 
-	chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false)
+	chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, false)
 	if err != nil {
 		return chainDb, nil, err
 	}
