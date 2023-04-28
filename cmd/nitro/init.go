@@ -175,25 +175,44 @@ func validateBlockChain(blockChain *core.BlockChain, expectedChainId *big.Int) e
 
 func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeConfig, chainId *big.Int, cacheConfig *core.CacheConfig) (ethdb.Database, *core.BlockChain, error) {
 	if !config.Init.Force {
-		if readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true); err == nil {
-			if chainConfig := arbnode.TryReadStoredChainConfig(readOnlyDb); chainConfig != nil {
-				readOnlyDb.Close()
-				chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false)
-				if err != nil {
-					return chainDb, nil, err
-				}
-				l2BlockChain, err := arbnode.GetBlockChain(chainDb, cacheConfig, chainConfig, &config.Node)
-				if err != nil {
-					return chainDb, nil, err
-				}
-				err = validateBlockChain(l2BlockChain, chainConfig.ChainID)
-				if err != nil {
-					return chainDb, l2BlockChain, err
-				}
-				return chainDb, l2BlockChain, nil
-			}
-			readOnlyDb.Close()
+		readOnlyDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", 0, 0, "", "", true, true)
+		if err != nil {
+			return readOnlyDb, nil, err
 		}
+		chainConfig := arbnode.TryReadStoredChainConfig(readOnlyDb)
+		if chainConfig != nil {
+			readOnlyDb.Close()
+			// init freezer with transfers table
+			if config.Init.ThenQuit {
+				// open freezer tables without transfers
+				chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, true)
+				if err != nil {
+					return chainDb, nil, err
+				}
+
+				// init statedb and write transfers back to freezer
+				err = rawdb.InitTransferFreezer(stack.ResolveAncient("l2chaindata", ""), chainDb)
+				if err != nil {
+					return chainDb, nil, err
+				}
+				chainDb.Close()
+			}
+
+			chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, false)
+			if err != nil {
+				return chainDb, nil, err
+			}
+			l2BlockChain, err := arbnode.GetBlockChain(chainDb, cacheConfig, chainConfig, &config.Node)
+			if err != nil {
+				return chainDb, nil, err
+			}
+			err = validateBlockChain(l2BlockChain, chainConfig.ChainID)
+			if err != nil {
+				return chainDb, l2BlockChain, err
+			}
+			return chainDb, l2BlockChain, nil
+		}
+		readOnlyDb.Close()
 	}
 
 	initFile, err := downloadInit(ctx, &config.Init)
@@ -219,7 +238,7 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 
 	var initDataReader statetransfer.InitDataReader = nil
 
-	chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false)
+	chainDb, err := stack.OpenDatabaseWithFreezer("l2chaindata", config.Node.Caching.DatabaseCache, config.Persistent.Handles, "", "", false, false)
 	if err != nil {
 		return chainDb, nil, err
 	}
