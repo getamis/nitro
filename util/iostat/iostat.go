@@ -13,6 +13,13 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
+// normalizeDeviceNameForMetrics ensures compatibility with Prometheus metrics parsing by
+// replacing `-` in infrastructure disk device names with `_`. This is necessary
+// because `-` in device names can cause parsing errors in Prometheus metrics.
+func normalizeDeviceNameForMetrics(deviceName string) string {
+	return strings.ReplaceAll(deviceName, "-", "_")
+}
+
 func RegisterAndPopulateMetrics(ctx context.Context, spawnInterval, maxDeviceCount int) {
 	if runtime.GOOS != "linux" {
 		log.Warn("Iostat command not supported disabling corresponding metrics")
@@ -27,21 +34,23 @@ func RegisterAndPopulateMetrics(ctx context.Context, spawnInterval, maxDeviceCou
 			log.Info("Iostat statReceiver channel was closed due to error or command being completed")
 			return
 		}
-		if _, ok := deviceMetrics[stat.DeviceName]; !ok {
+
+		deviceName := normalizeDeviceNameForMetrics(stat.DeviceName)
+		if _, ok := deviceMetrics[deviceName]; !ok {
 			// Register metrics for a maximum of maxDeviceCount (fail safe incase iostat command returns incorrect names indefinitely)
 			if len(deviceMetrics) < maxDeviceCount {
-				baseMetricName := fmt.Sprintf("isotat/%s/", stat.DeviceName)
-				deviceMetrics[stat.DeviceName] = make(map[string]metrics.GaugeFloat64)
-				deviceMetrics[stat.DeviceName]["readspersecond"] = metrics.NewRegisteredGaugeFloat64(baseMetricName+"readspersecond", nil)
-				deviceMetrics[stat.DeviceName]["writespersecond"] = metrics.NewRegisteredGaugeFloat64(baseMetricName+"writespersecond", nil)
-				deviceMetrics[stat.DeviceName]["await"] = metrics.NewRegisteredGaugeFloat64(baseMetricName+"await", nil)
+				baseMetricName := fmt.Sprintf("isotat/%s/", deviceName)
+				deviceMetrics[deviceName] = make(map[string]metrics.GaugeFloat64)
+				deviceMetrics[deviceName]["readspersecond"] = metrics.NewRegisteredGaugeFloat64(baseMetricName+"readspersecond", nil)
+				deviceMetrics[deviceName]["writespersecond"] = metrics.NewRegisteredGaugeFloat64(baseMetricName+"writespersecond", nil)
+				deviceMetrics[deviceName]["await"] = metrics.NewRegisteredGaugeFloat64(baseMetricName+"await", nil)
 			} else {
 				continue
 			}
 		}
-		deviceMetrics[stat.DeviceName]["readspersecond"].Update(stat.ReadsPerSecond)
-		deviceMetrics[stat.DeviceName]["writespersecond"].Update(stat.WritesPerSecond)
-		deviceMetrics[stat.DeviceName]["await"].Update(stat.Await)
+		deviceMetrics[deviceName]["readspersecond"].Update(stat.ReadsPerSecond)
+		deviceMetrics[deviceName]["writespersecond"].Update(stat.WritesPerSecond)
+		deviceMetrics[deviceName]["await"].Update(stat.Await)
 	}
 }
 
